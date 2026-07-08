@@ -1,0 +1,44 @@
+# e2e — validates the execute path on a real kind cluster: the enforcement
+# contract (label → agent eviction) and the controller actuating against a stub
+# policy (samples one of two surge nodes, oldest-first, never the stable node).
+# Heavier than the unit lane (ci.yml), so it runs on PRs touching the controller
+# and on demand.
+#
+# kind + helm are installed via shell (not third-party actions) so the workflow
+# stays independent of any org Actions allowlist — only actions/checkout is a
+# `uses:`. docker + kubectl are preinstalled on the runner.
+name: e2e
+
+on:
+  pull_request:
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "chart/**"
+      - "e2e/**"
+      - "Dockerfile"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install kind + helm
+        run: |
+          curl -fsSLo ./kind https://kind.sigs.k8s.io/dl/v0.32.0/kind-linux-amd64
+          sudo install -m 0755 ./kind /usr/local/bin/kind && rm ./kind
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Create kind cluster
+        run: kind create cluster --name hs-e2e --config e2e/kind.yaml --wait 120s
+
+      - name: Run e2e
+        env:
+          KIND_CLUSTER: hs-e2e
+        run: bash e2e/run.sh

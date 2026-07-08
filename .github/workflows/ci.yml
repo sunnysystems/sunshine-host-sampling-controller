@@ -1,9 +1,4 @@
-# CI — runs on every push to main and every PR.
-#
-# NOTE: this workflow lives under host-sampling-controller/.github/ and is DORMANT
-# inside the Sunshine monorepo (GitHub Actions only reads .github/workflows/ at the
-# repository root). It activates once this subtree becomes the root of the public
-# sunnysystems/sunshine-host-sampling-controller repo.
+# CI — gofmt/vet/test/build + helm lint on every push to main and every PR.
 name: ci
 
 on:
@@ -18,9 +13,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -29,7 +24,7 @@ jobs:
       - name: make check
         run: make check
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: v3.16.2
 

@@ -1,0 +1,41 @@
+# Stub "Datadog agent" DaemonSet carrying the enforcement contract: the inverted
+# nodeAffinity on datadog.sunshine/sampled-out. A node labelled sampled-out=true
+# must NOT run this pod (that is what pulls the agent → drops the billable host).
+# Uses the pause image — we only assert scheduling, not agent behaviour. The
+# control-plane taint keeps it off the control-plane, so it runs on the 3 workers.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: datadog
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: datadog-agent
+  namespace: datadog
+spec:
+  selector:
+    matchLabels:
+      app: datadog-agent
+  template:
+    metadata:
+      labels:
+        app: datadog-agent
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  # No label / value != "true" → schedules → monitored (fail-open).
+                  - key: datadog.sunshine/sampled-out
+                    operator: NotIn
+                    values: ["true"]
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: agent
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi

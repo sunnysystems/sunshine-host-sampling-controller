@@ -1,0 +1,54 @@
+image:
+  repository: ghcr.io/sunnysystems/host-sampling-controller
+  # tag defaults to the chart appVersion when empty
+  tag: ""
+  pullPolicy: IfNotPresent
+
+sunshine:
+  # Sunshine base URL — required.
+  endpoint: ""
+  # Cluster id — must match the inbound token's resource scope. Required.
+  clusterId: ""
+  # Name of a Secret holding the inbound token — required.
+  tokenSecretName: ""
+  # Key within that Secret.
+  tokenSecretKey: token
+
+# How often the controller reconciles.
+pollIntervalSeconds: 60
+
+# Datadog agent DaemonSet, for the enforcement preflight (optional but strongly
+# recommended before enabling execute). When both are set, the controller reads
+# the DaemonSet (read-only) to confirm it carries the inverted nodeAffinity on
+# datadog.sunshine/sampled-out and reports
+# sunshine_host_sampling_enforcement_affinity_present. Without that affinity,
+# labelling a node does NOT remove its agent.
+agent:
+  daemonsetNamespace: ""
+  daemonsetName: ""
+
+# Execute mode. Leave true (dry-run) unless the org has been validated for
+# execute. When false, the controller runs the LabelActuator (it may write the
+# datadog.sunshine/sampled-out label) AND the RBAC is widened to allow node
+# patches. This is only ONE of three locks: the controller still labels a node
+# only when Sunshine serves policy mode "active", which the server refuses
+# unless the org's datadogCostGuardHostSamplingExecute flag is on and it is not
+# a demo org. Prerequisite before setting false: the agent DaemonSet MUST carry
+# the inverted nodeAffinity on datadog.sunshine/sampled-out (see README) — the
+# label has no effect otherwise.
+dryRun: true
+
+metrics:
+  port: 9090
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

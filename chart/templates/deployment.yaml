@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hsc.fullname" . }}
+  labels:
+    {{- include "hsc.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "hsc.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hsc.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "hsc.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SUNSHINE_ENDPOINT
+              value: {{ required "sunshine.endpoint is required" .Values.sunshine.endpoint | quote }}
+            - name: CLUSTER_ID
+              value: {{ required "sunshine.clusterId is required" .Values.sunshine.clusterId | quote }}
+            - name: SUNSHINE_TOKEN_FILE
+              value: /var/run/sunshine/token
+            - name: POLL_INTERVAL_SECONDS
+              value: {{ .Values.pollIntervalSeconds | quote }}
+            - name: DRY_RUN
+              value: {{ .Values.dryRun | quote }}
+            {{- if .Values.agent.daemonsetNamespace }}
+            - name: AGENT_DAEMONSET_NAMESPACE
+              value: {{ .Values.agent.daemonsetNamespace | quote }}
+            {{- end }}
+            {{- if .Values.agent.daemonsetName }}
+            - name: AGENT_DAEMONSET_NAME
+              value: {{ .Values.agent.daemonsetName | quote }}
+            {{- end }}
+            - name: METRICS_ADDR
+              value: ":{{ .Values.metrics.port }}"
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: token
+              mountPath: /var/run/sunshine
+              readOnly: true
+      volumes:
+        - name: token
+          secret:
+            secretName: {{ required "sunshine.tokenSecretName is required" .Values.sunshine.tokenSecretName }}
+            items:
+              - key: {{ .Values.sunshine.tokenSecretKey }}
+                path: token
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

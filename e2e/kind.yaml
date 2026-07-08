@@ -1,0 +1,10 @@
+# kind cluster for the host-sampling e2e: one control-plane + three workers.
+# The workers stand in for the node pools — one stable, two surge — so the
+# controller (40% keep, floor 1) samples out exactly one surge node.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+  - role: worker

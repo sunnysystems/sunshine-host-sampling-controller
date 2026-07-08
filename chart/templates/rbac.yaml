@@ -1,0 +1,36 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "hsc.fullname" . }}
+  labels:
+    {{- include "hsc.labels" . | nindent 4 }}
+rules:
+  # Dry-run needs only to read nodes (and their labels/creation timestamps).
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  # Read-only: the enforcement preflight reads the agent DaemonSet's affinity.
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    verbs: ["get", "list"]
+  {{- if not .Values.dryRun }}
+  # Execute mode additionally patches the sampled-out label onto surge nodes.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["patch", "update"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "hsc.fullname" . }}
+  labels:
+    {{- include "hsc.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "hsc.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hsc.fullname" . }}
+    namespace: {{ .Release.Namespace }}

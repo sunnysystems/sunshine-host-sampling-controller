@@ -1,0 +1,59 @@
+# Stand-in for the Sunshine policy endpoint. Serves a static "active" policy at
+# GET /api/autopilot/policy/host-sampling and swallows the controller's report
+# POSTs (204). No auth — the token is not validated; this only feeds the
+# controller a mode=active policy so it actuates against the kind cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stub-policy
+  namespace: default
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location = /api/autopilot/policy/host-sampling {
+        default_type application/json;
+        return 200 '{"configured":true,"policy":{"mode":"active","surgeSamplePct":40,"stablePoolSelector":"pool=stable","surgePoolSelector":"pool=surge","floorNodes":1},"version":"1"}';
+      }
+      location / { return 204; }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stub-policy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stub-policy
+  template:
+    metadata:
+      labels:
+        app: stub-policy
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: conf
+          configMap:
+            name: stub-policy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stub-policy
+  namespace: default
+spec:
+  selector:
+    app: stub-policy
+  ports:
+    - port: 80
+      targetPort: 80

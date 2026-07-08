@@ -1,0 +1,10 @@
+# Build output
+/bin/
+/dist/
+
+# Packaged Helm charts
+*.tgz
+
+# Local env / editor
+.env
+.DS_Store

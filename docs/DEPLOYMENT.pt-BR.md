@@ -1,5 +1,7 @@
 # Implantação do Host-Sampling Controller no cliente
 
+> 🌐 [English](DEPLOYMENT.md) · **Português**
+
 > Runbook de ponta a ponta para instalar o **Sunshine host-sampling controller**
 > no cluster Kubernetes de um cliente — do piloto seguro em **dry-run**
 > até o **go-live em execute**.

@@ -108,7 +108,9 @@ The pure packages (`policy`, `node`, `planner`, `actuator`, `reconcile`,
 
 ## Deploy
 
-See [`chart/README.md`](chart/README.md) for the Helm chart. In short:
+For the full operational runbook — dry-run pilot through execute go-live — see
+**[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** ([Português](docs/DEPLOYMENT.pt-BR.md)).
+See [`chart/README.md`](chart/README.md) for the Helm chart reference. In short:
 
 ```sh
 kubectl create secret generic host-sampling-token --from-literal=token=<token>
@@ -123,6 +125,23 @@ The chart grants **read-only** node access in dry-run (`get/list/watch` on nodes
 added only when `dryRun=false`. Before setting `dryRun=false`, apply the
 [enforcement contract](#enforcement-contract-required-for-execute) and set
 `agent.daemonsetNamespace`/`agent.daemonsetName` so the preflight can verify it.
+
+## Compatibility & updates
+
+**Versioning.** The controller and chart follow [SemVer](https://semver.org). Each
+release is tagged, recorded in [`CHANGELOG.md`](CHANGELOG.md), and ships a
+cosign-signed multi-arch image plus a signed OCI Helm chart.
+
+**Server API compatibility.** The policy contract this controller polls
+(`/api/autopilot/policy/host-sampling`) evolves **additively / backward-compatible
+only**: new optional fields may appear, but existing fields are never removed or
+repurposed. Any released controller keeps working against the current Sunshine
+server — you don't have to upgrade in lockstep.
+
+**Getting updates.** Watch this repo's **Releases** for new versions (especially
+security fixes) and upgrade with `helm upgrade` to the new chart version (the image
+is pinned by the chart `appVersion`). Report vulnerabilities privately per
+[`SECURITY.md`](SECURITY.md).
 
 ## Contributing & support
 

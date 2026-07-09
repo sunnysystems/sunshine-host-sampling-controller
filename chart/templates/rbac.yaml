@@ -15,9 +15,11 @@ rules:
     verbs: ["get", "list"]
   {{- if not .Values.dryRun }}
   # Execute mode additionally patches the sampled-out label onto surge nodes.
+  # `patch` only — the controller issues a strategic-merge PATCH and never a
+  # full `update`, so `update` is deliberately withheld (least privilege).
   - apiGroups: [""]
     resources: ["nodes"]
-    verbs: ["patch", "update"]
+    verbs: ["patch"]
   {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

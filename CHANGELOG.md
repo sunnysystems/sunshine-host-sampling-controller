@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Release workflow:** pass GHCR credentials via `env:` and
+  `helm registry login --password-stdin` instead of interpolating
+  `${{ github.actor }}` / `${{ secrets.GITHUB_TOKEN }}` directly into the shell
+  command (defense against script injection; keeps the token off the process
+  argument list).
+- **RBAC least privilege:** execute mode now grants only `patch` on nodes (the
+  unused `update` verb was dropped — the controller only issues a strategic-merge
+  PATCH).
+- **Cleartext-token guard:** warn at startup when `SUNSHINE_ENDPOINT` is not
+  `https://`, since the inbound token would otherwise be sent in cleartext.
+
 ## [1.0.0] - 2026-07-08
 
 First public release (Apache-2.0). Peak host sampling for Kubernetes: keep the

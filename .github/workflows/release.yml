@@ -76,9 +76,12 @@ jobs:
           version: v3.16.2
 
       - name: package, push and sign chart
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          helm registry login "${REGISTRY}" -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+          echo "$GHCR_TOKEN" | helm registry login "${REGISTRY}" -u "$GHCR_USER" --password-stdin
           helm package chart/ --destination dist/
           chart_tgz="$(ls dist/*.tgz)"
           chart_name="$(helm show chart chart/ | awk '/^name:/{print $2}')"

@@ -32,9 +32,10 @@ Sunshine e reconcilia o label de nó `datadog.sunshine/sampled-out` em direção
 plano. **O padrão é dry-run** (só relata, nunca mexe no cluster). Ele só escreve
 labels quando os **três locks** da seção 3 estão satisfeitos.
 
-> ⚠️ Este é o primeiro artefato da Sunny que roda no ambiente de um cliente.
-> Distribuição, assinatura e versionamento da imagem ainda estão em evolução.
-> Trate como early-adopter e alinhe a via de distribuição com a Sunny.
+> ⚠️ Este é o primeiro artefato da Sunny que roda no ambiente de um cliente —
+> trate o rollout com cuidado de early-adopter. As releases são versionadas
+> (SemVer) e publicam uma imagem multi-arch assinada com cosign mais um Helm
+> chart OCI assinado, ambos públicos no GHCR (verificação na seção 11).
 
 ---
 
@@ -84,7 +85,7 @@ deles no default mantém o cluster 100% monitorado.
 
 | # | Lock | Onde | Como habilitar | Efeito |
 |---|------|------|----------------|--------|
-| 1 | **Local** | cluster do cliente (Helm) | `dryRun: false` (`DRY_RUN=false`) | Seleciona o `LabelActuator` (escreve labels) **e** amplia o RBAC pra permitir `patch/update` em nodes. |
+| 1 | **Local** | cluster do cliente (Helm) | `dryRun: false` (`DRY_RUN=false`) | Seleciona o `LabelActuator` (escreve labels) **e** amplia o RBAC pra permitir `patch` em nodes. |
 | 2 | **Server** | Sunshine | flag `datadogCostGuardHostSamplingExecute` **on** na org + **não** ser org demo → servidor serve `mode: "active"` | Sem isso o servidor rebaixa a política pra `dry_run`. É o **kill-switch central** da Sunny. |
 | 3 | **Cluster** | DaemonSet do agente Datadog | `nodeAffinity` invertida no label (seção 4) | Sem ela o label **não tem efeito**: o agente continua agendando nos nós amostrados → você paga sem monitorar. |
 
@@ -141,11 +142,11 @@ affinity:
       > ⚠️ O matcher só entende **`key=value` exato** — nada de expressões
       > compostas, `In`, faixas, etc. Se os pools ainda não têm um label
       > determinístico, **crie-o nos node pools antes** de configurar a política.
-- [ ] **Acesso à imagem** `ghcr.io/sunnysystems/host-sampling-controller`
-      (o cliente precisa conseguir dar `pull`; se o registry for privado,
-      configure `imagePullSecrets` ou espelhe a imagem num registry interno).
-      *(Distribuição da imagem é tech-debt — confirme com a Sunny a via de
-      distribuição para este cliente.)*
+- [ ] **Acesso à imagem** `ghcr.io/sunnysystems/host-sampling-controller` —
+      ela é **pública** no GHCR (pull anônimo), multi-arch (amd64/arm64) e
+      assinada com cosign (verificação na seção 11). Se o cluster só puxa de um
+      registry interno, espelhe a imagem e aponte o chart para ela via
+      `image.repository`/`image.tag`.
 - [ ] **Token de entrada** emitido no Sunshine (**Autopilot → Component tokens**),
       **escopado por (org, cluster)** e **read-only**. É o mesmo token usado
       para consultar a política e para reportar.
@@ -169,8 +170,13 @@ kubectl create secret generic host-sampling-token \
 
 ### 6.2 Instalar o chart (dry-run é o default)
 
+O chart é publicado como artefato OCI assinado no GHCR; a partir de um checkout
+do código, `./chart` funciona no lugar da referência OCI.
+
 ```sh
-helm install host-sampling ./chart \
+helm install host-sampling \
+  oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
+  --version 1.0.1 \
   --set sunshine.endpoint=https://app.sunshine.example.com \
   --set sunshine.clusterId=prod-us-east-1 \
   --set sunshine.tokenSecretName=host-sampling-token \
@@ -259,7 +265,9 @@ seguro:
    **`mode: active`**.
 3. **Local lock (cluster do cliente):** habilite o `LabelActuator` e amplie o RBAC:
    ```sh
-   helm upgrade host-sampling ./chart --reuse-values --set dryRun=false
+   helm upgrade host-sampling \
+     oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
+     --version 1.0.1 --reuse-values --set dryRun=false
    ```
 
 ### O que observar após o go-live
@@ -339,7 +347,7 @@ kubectl label nodes --all datadog.sunshine/sampled-out-
 ## 11. Segurança e footprint
 
 - **RBAC mínimo:** em dry-run, só `get/list/watch` em `nodes` e `get/list` em
-  `daemonsets` (preflight). Os verbos `patch/update` em `nodes` só são concedidos
+  `daemonsets` (preflight). O verbo `patch` em `nodes` só é concedido
   quando `dryRun=false`.
 - **Container endurecido:** imagem distroless, `runAsNonRoot`,
   `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `drop: ["ALL"]`,
@@ -349,6 +357,27 @@ kubectl label nodes --all datadog.sunshine/sampled-out-
 - **Footprint:** 1 réplica; requests `25m` CPU / `32Mi` mem, limits `100m` / `64Mi`.
 - **Única via de escrita** ao cluster: `PATCH` de label de nó (strategic-merge),
   no `LabelActuator`.
+
+### Verificando os artefatos (opcional, recomendado)
+
+Imagem e chart são assinados keylessly com [cosign](https://docs.sigstore.dev/)
+pelo workflow de release; a identidade de assinatura é o `release.yml` do repo
+na tag da versão:
+
+```sh
+cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.0.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp \
+  '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
+
+cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.0.1 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp \
+  '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
+```
+
+A imagem também carrega attestations de SBOM e proveniência SLSA, inspecionáveis
+com `docker buildx imagetools inspect`.
 
 ---
 
@@ -363,7 +392,7 @@ kubectl label nodes --all datadog.sunshine/sampled-out-
 | `dryRun=false` mas nenhum label aplicado | Server **não** serve `mode: active` (flag off ou org demo) | Ligar `datadogCostGuardHostSamplingExecute`, garantir não-demo, política `active`. |
 | Nós com `sampled-out=true` mas host count **não** cai no Datadog | Falta o enforcement (nodeAffinity) → agente segue no nó | Adicionar a `nodeAffinity` (seção 4). |
 | Plano oscila (nós entram/saem) | `surgeSamplePct`/`floorNodes` no limiar de um pool volátil | Ajustar `floorNodes`/`surgeSamplePct`; membership é oldest-first, mas surge muito volátil ainda oscila. |
-| `label_errors_total > 0` | RBAC ou conflito no patch | Confirmar que `dryRun=false` concedeu `patch/update` em `nodes`; ver logs por nó. |
+| `label_errors_total > 0` | RBAC ou conflito no patch | Confirmar que `dryRun=false` concedeu `patch` em `nodes`; ver logs por nó. |
 
 ---
 
@@ -415,14 +444,12 @@ POST {endpoint}/api/autopilot/report/host-sampling   (best-effort, mesma auth)
 
 ---
 
-## 14. Limitações conhecidas / tech-debt
+## 14. Limitações conhecidas
 
-- **Distribuição/assinatura da imagem** ainda está em evolução. Alinhe a via de
-  distribuição com a Sunny antes de instalar no cliente.
 - **Selector de pool** só entende `key=value` **exato** — nada de expressões
   compostas. Garanta labels determinísticos nos node pools.
-- **Primeiro artefato in-customer** — trate como early-adopter
-  (suporte/versionamento em evolução).
+- **Primeiro artefato in-customer** — opere com cuidado de early-adopter;
+  reporte problemas conforme o [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 - **Só reduz host count** (infra/APM host-based). Outras dimensões de custo (RUM,
   logs, APM ingestion, custom metrics) são cobertas por outros mecanismos do
   autopilot.

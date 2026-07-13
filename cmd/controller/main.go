@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -38,6 +39,10 @@ func main() {
 	if err != nil {
 		log.Error("configuration error", "err", err)
 		os.Exit(1)
+	}
+	if !strings.HasPrefix(cfg.Endpoint, "https://") {
+		log.Warn("SUNSHINE_ENDPOINT is not https — the inbound token is sent in cleartext; use https for any endpoint outside the cluster network",
+			"endpoint", cfg.Endpoint)
 	}
 	restCfg, err := rest.InClusterConfig()
 	if err != nil {

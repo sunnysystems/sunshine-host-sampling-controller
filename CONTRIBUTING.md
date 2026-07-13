@@ -32,6 +32,9 @@ relevant. A minimal reproduction (manifest / values) helps a lot.
 
 ## Building and testing locally (for auditors)
 
+Building locally requires **Go 1.25+**; `make docker` needs only Docker (the
+image is a self-contained multi-stage build).
+
 The pure packages (`policy`, `node`, `planner`, `actuator`, `reconcile`,
 `metrics`, `config`) have **no Kubernetes dependency** and unit-test offline;
 `kube`/`cmd` are the thin client-go integration layer.
@@ -40,6 +43,18 @@ The pure packages (`policy`, `node`, `planner`, `actuator`, `reconcile`,
 make check    # gofmt + vet + test + build
 make docker   # build the container image
 ```
+
+To validate the full execute path (label → agent eviction → controller
+actuation) on a local [kind](https://kind.sigs.k8s.io) cluster — the same check
+CI runs:
+
+```sh
+kind create cluster --name hs-e2e --config e2e/kind.yaml --wait 120s
+KIND_CLUSTER=hs-e2e bash e2e/run.sh
+```
+
+Release images and charts are cosign-signed — see "Verifying release artifacts"
+in the [README](README.md#verifying-release-artifacts).
 
 ## License of contributions
 

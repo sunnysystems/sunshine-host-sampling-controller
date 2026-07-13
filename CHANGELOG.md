@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-13
+
 ### Security
 
 - **Release workflow:** pass GHCR credentials via `env:` and
@@ -19,6 +21,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PATCH).
 - **Cleartext-token guard:** warn at startup when `SUNSHINE_ENDPOINT` is not
   `https://`, since the inbound token would otherwise be sent in cleartext.
+
+### Documentation
+
+- **Signed artifacts documented:** the docs no longer say image
+  distribution/signing are "in progress" — releases publish a public,
+  cosign-signed multi-arch image and a signed OCI Helm chart to GHCR, with
+  SBOM and SLSA provenance attestations.
+- **Artifact verification:** `cosign verify` commands (image + chart, keyless
+  identity pinned to the release workflow) in the README and both deployment
+  runbooks.
+- **OCI chart install:** install/upgrade examples now use the published
+  `oci://ghcr.io/sunnysystems/charts/...` chart, with `./chart` kept as the
+  from-source alternative.
+- **Build-your-own-image path:** `make docker IMAGE=...` → push → point the
+  chart at it via `image.repository`/`image.tag`.
+- **Local validation:** documented the Go 1.25+ build prerequisite and the
+  `e2e/run.sh` kind-based end-to-end check (same as CI).
 
 ## [1.0.0] - 2026-07-08
 
@@ -56,5 +75,6 @@ the Datadog host-count bill.
 - **Helm chart** — `chart/` with RBAC that is read-only in dry-run and widens to
   node `patch/update` only when `dryRun=false`.
 
-[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/releases/tag/v1.0.0

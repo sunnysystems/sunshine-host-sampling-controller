@@ -22,7 +22,7 @@ cluster) and writes labels only when all three locks are satisfied — see the
    ```sh
    helm install host-sampling \
      oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
-     --version 1.0.0 \
+     --version 1.0.1 \
      --set sunshine.endpoint=https://app.sunshine.example.com \
      --set sunshine.clusterId=prod-us-east-1 \
      --set sunshine.tokenSecretName=host-sampling-token

@@ -177,7 +177,7 @@ The chart is published as a signed OCI artifact on GHCR; from a source checkout,
 ```sh
 helm install host-sampling \
   oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
-  --version 1.0.0 \
+  --version 1.0.1 \
   --set sunshine.endpoint=https://app.sunshine.example.com \
   --set sunshine.clusterId=prod-us-east-1 \
   --set sunshine.tokenSecretName=host-sampling-token \
@@ -268,7 +268,7 @@ stays safe:
    ```sh
    helm upgrade host-sampling \
      oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
-     --version 1.0.0 --reuse-values --set dryRun=false
+     --version 1.0.1 --reuse-values --set dryRun=false
    ```
 
 ### What to watch after go-live
@@ -366,12 +366,12 @@ by the release workflow; the signing identity is the repo's `release.yml` on the
 version tag:
 
 ```sh
-cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.0.0 \
+cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.0.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
   '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
 
-cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.0.0 \
+cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.0.1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
   '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'

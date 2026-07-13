@@ -32,9 +32,10 @@ and reconciles the `datadog.sunshine/sampled-out` node label toward the plan. **
 default is dry-run** (reports only, never touches the cluster). It writes labels
 only when the **three locks** in section 3 are satisfied.
 
-> ⚠️ This is the first Sunny artifact that runs in a customer's environment.
-> Image distribution, signing and versioning are still being finalized. Treat it
-> as an early-adopter and align the distribution path with Sunny.
+> ⚠️ This is the first Sunny artifact that runs in a customer's environment —
+> treat rollouts with early-adopter care. Releases are versioned (SemVer) and
+> ship a cosign-signed multi-arch image plus a signed OCI Helm chart, both
+> public on GHCR (verification in section 11).
 
 ---
 
@@ -84,7 +85,7 @@ them at its default keeps the cluster 100% monitored.
 
 | # | Lock | Where | How to enable | Effect |
 |---|------|-------|---------------|--------|
-| 1 | **Local** | customer cluster (Helm) | `dryRun: false` (`DRY_RUN=false`) | Selects the `LabelActuator` (writes labels) **and** widens RBAC to allow `patch/update` on nodes. |
+| 1 | **Local** | customer cluster (Helm) | `dryRun: false` (`DRY_RUN=false`) | Selects the `LabelActuator` (writes labels) **and** widens RBAC to allow `patch` on nodes. |
 | 2 | **Server** | Sunshine | `datadogCostGuardHostSamplingExecute` flag **on** for the org + **not** a demo org → server serves `mode: "active"` | Otherwise the server downgrades the policy to `dry_run`. It is Sunny's **central kill-switch**. |
 | 3 | **Cluster** | Datadog agent DaemonSet | inverted `nodeAffinity` on the label (section 4) | Without it the label **has no effect**: the agent keeps scheduling on sampled-out nodes → you pay without monitoring. |
 
@@ -142,11 +143,11 @@ affinity:
       > ⚠️ The matcher only understands **exact `key=value`** — no compound
       > expressions, `In`, ranges, etc. If the pools don't yet have a deterministic
       > label, **create it on the node pools first**, before configuring the policy.
-- [ ] **Access to the image** `ghcr.io/sunnysystems/host-sampling-controller` (the
-      customer must be able to `pull` it; if the registry is private, configure
-      `imagePullSecrets` or mirror the image to an internal registry).
-      *(Image distribution is still being finalized — confirm the distribution path
-      for this customer with Sunny.)*
+- [ ] **Access to the image** `ghcr.io/sunnysystems/host-sampling-controller` —
+      it is **public** on GHCR (anonymous pull), multi-arch (amd64/arm64) and
+      cosign-signed (verification in section 11). If the cluster can only pull
+      from an internal registry, mirror the image and point the chart at it via
+      `image.repository`/`image.tag`.
 - [ ] **Inbound token** issued in Sunshine (**Autopilot → Component tokens**),
       **scoped to (org, cluster)** and **read-only**. It is the same token used to
       fetch the policy and to report.
@@ -170,8 +171,13 @@ kubectl create secret generic host-sampling-token \
 
 ### 6.2 Install the chart (dry-run is the default)
 
+The chart is published as a signed OCI artifact on GHCR; from a source checkout,
+`./chart` works in place of the OCI reference.
+
 ```sh
-helm install host-sampling ./chart \
+helm install host-sampling \
+  oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
+  --version 1.0.0 \
   --set sunshine.endpoint=https://app.sunshine.example.com \
   --set sunshine.clusterId=prod-us-east-1 \
   --set sunshine.tokenSecretName=host-sampling-token \
@@ -260,7 +266,9 @@ stays safe:
    policy to **`mode: active`**.
 3. **Local lock (customer cluster):** enable the `LabelActuator` and widen RBAC:
    ```sh
-   helm upgrade host-sampling ./chart --reuse-values --set dryRun=false
+   helm upgrade host-sampling \
+     oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
+     --version 1.0.0 --reuse-values --set dryRun=false
    ```
 
 ### What to watch after go-live
@@ -340,7 +348,7 @@ kubectl label nodes --all datadog.sunshine/sampled-out-
 ## 11. Security and footprint
 
 - **Minimal RBAC:** in dry-run, only `get/list/watch` on `nodes` and `get/list` on
-  `daemonsets` (preflight). The `patch/update` verbs on `nodes` are granted only
+  `daemonsets` (preflight). The `patch` verb on `nodes` is granted only
   when `dryRun=false`.
 - **Hardened container:** distroless image, `runAsNonRoot`,
   `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `drop: ["ALL"]`,
@@ -350,6 +358,27 @@ kubectl label nodes --all datadog.sunshine/sampled-out-
 - **Footprint:** 1 replica; requests `25m` CPU / `32Mi` mem, limits `100m` / `64Mi`.
 - **Only write path** to the cluster: a `PATCH` of a node label (strategic-merge),
   in the `LabelActuator`.
+
+### Verifying the artifacts (optional, recommended)
+
+Image and chart are signed keylessly with [cosign](https://docs.sigstore.dev/)
+by the release workflow; the signing identity is the repo's `release.yml` on the
+version tag:
+
+```sh
+cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.0.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp \
+  '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
+
+cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.0.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp \
+  '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
+```
+
+The image also carries SBOM and SLSA provenance attestations, inspectable with
+`docker buildx imagetools inspect`.
 
 ---
 
@@ -364,7 +393,7 @@ kubectl label nodes --all datadog.sunshine/sampled-out-
 | `dryRun=false` but no label applied | Server does **not** serve `mode: active` (flag off or demo org) | Turn on `datadogCostGuardHostSamplingExecute`, ensure non-demo, policy `active`. |
 | Nodes with `sampled-out=true` but the host count **doesn't** drop in Datadog | Enforcement missing (nodeAffinity) → agent stays on the node | Add the `nodeAffinity` (section 4). |
 | Plan oscillates (nodes come/go) | `surgeSamplePct`/`floorNodes` on the edge of a volatile pool | Adjust `floorNodes`/`surgeSamplePct`; membership is oldest-first, but a very volatile surge still oscillates. |
-| `label_errors_total > 0` | RBAC or patch conflict | Confirm `dryRun=false` granted `patch/update` on `nodes`; check per-node logs. |
+| `label_errors_total > 0` | RBAC or patch conflict | Confirm `dryRun=false` granted `patch` on `nodes`; check per-node logs. |
 
 ---
 
@@ -418,11 +447,9 @@ POST {endpoint}/api/autopilot/report/host-sampling   (best-effort, same auth)
 
 ## 14. Known limitations
 
-- **Image distribution/signing** is still being finalized. Align the distribution
-  path with Sunny before installing at a customer.
 - **Pool selector** only understands **exact `key=value`** — no compound
   expressions. Ensure deterministic labels on the node pools.
-- **First in-customer artifact** — treat it as an early-adopter
-  (support/versioning evolving).
+- **First in-customer artifact** — operate with early-adopter care; report
+  issues per [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 - **Only reduces host count** (infra/APM host-based). Other cost dimensions (RUM,
   logs, APM ingestion, custom metrics) are covered by other autopilot mechanisms.

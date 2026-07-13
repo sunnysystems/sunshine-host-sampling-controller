@@ -142,6 +142,9 @@ affinity:
       > ⚠️ O matcher só entende **`key=value` exato** — nada de expressões
       > compostas, `In`, faixas, etc. Se os pools ainda não têm um label
       > determinístico, **crie-o nos node pools antes** de configurar a política.
+      > Se seus node pools são organizados por outro eixo (formato de workload,
+      > time, arquitetura) em vez de fixo-vs-surge — comum com Karpenter — veja
+      > **5.1** abaixo.
 - [ ] **Acesso à imagem** `ghcr.io/sunnysystems/host-sampling-controller` —
       ela é **pública** no GHCR (pull anônimo), multi-arch (amd64/arm64) e
       assinada com cosign (verificação na seção 11). Se o cluster só puxa de um
@@ -153,6 +156,53 @@ affinity:
 - [ ] **Endpoint do Sunshine** (base URL) e o **cluster id** — o `cluster id`
       **precisa bater** com o escopo do token.
 - [ ] **Egress HTTPS** do cluster para o endpoint do Sunshine liberado.
+
+### 5.1 Mapeando node pools para stable/surge (Karpenter e afins)
+
+A classificação precisa de **um label `key=value` exato por pool** (stable e surge).
+Isso é direto quando o cluster tem um pool fixo dedicado e um pool de surge
+dedicado. **Não** é óbvio quando os node pools são organizados por outro eixo —
+formato de workload (High CPU / High Memory / Graviton), time, arquitetura — porque
+aí baseline e surge coexistem **no mesmo pool**, e `karpenter.sh/nodepool` sozinho
+não separa fixo de surge.
+
+Dois fatos tornam isso tratável:
+
+- **Só o selector de surge gera economia.** Um nó que não casa com **nenhum**
+  selector segue 100% monitorado (untracked). Você nunca precisa enumerar os pools
+  fixos — só identificar bem os nós de surge. O selector de stable serve sobretudo
+  para deixar o relatório de dry-run mais nítido.
+- **Você nunca rotula nós à mão.** O selector aponta para um label que os nós
+  **já** carregam; o Karpenter carimba seus labels em todo nó que provisiona.
+
+Três formas de obter um selector de surge, da menor mudança de infra à mais
+determinística:
+
+| Abordagem | Quando | Selector de surge | Label novo? |
+|-----------|--------|-------------------|-------------|
+| **A. capacity-type** | Baseline on-demand, surge em spot | `karpenter.sh/capacity-type=spot` | Não — o Karpenter já aplica |
+| **B. floorNodes** | Manter baseline sem separar pools | pool ou capacity-type elástico | Não |
+| **C. NodePools de surge dedicados** | Corte determinístico por pool | `sunshine.io/pool=surge` | Sim — no NodePool, não por nó |
+
+- **A — capacity-type.** Se o baseline roda on-demand e o pico estoura em spot,
+  aponte o selector de surge para `karpenter.sh/capacity-type=spot`. Sem label novo,
+  cobrindo todos os pools de workload de uma vez.
+- **B — floorNodes.** Não é preciso um pool "fixo" fisicamente separado. Marque a
+  capacidade elástica como surge e defina `floorNodes` como o mínimo que deve seguir
+  monitorado. O controller mantém os `floorNodes` nós **mais antigos** monitorados
+  (na prática o baseline de longa duração) e amostra os mais novos. O corte é por
+  **idade**, não por identidade — trate `floorNodes` como margem de segurança, não
+  como um número exato.
+- **C — NodePools de surge dedicados.** Para um corte duro, divida cada pool em base
+  e surge (ex.: `high-cpu-base` / `high-cpu-surge`) e adicione um label compartilhado
+  como `sunshine.io/pool=surge` em `.spec.template.metadata.labels` dos NodePools de
+  surge. O Karpenter o carimba em todo nó daquele pool — ainda por pool, no
+  manifesto, nunca por nó.
+
+> O matcher de par único não codifica vários pools num só selector `nodepool=`.
+> Para amostrar CPU, Memory e Graviton juntos, use capacity-type (A) ou um label
+> compartilhado (C). Para manter um pool (ex.: Graviton) sempre monitorado, deixe-o
+> **fora** do selector de surge — sem match significa monitorado.
 
 ---
 

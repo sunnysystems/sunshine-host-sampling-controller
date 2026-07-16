@@ -5,7 +5,8 @@
 //	GET {endpoint}/api/autopilot/policy/host-sampling
 //	Authorization: Bearer <token>
 //	200 → {"configured":bool,"policy":{"mode","surgeSamplePct","stablePoolSelector",
-//	       "surgePoolSelector","floorNodes"},"version":string}  (+ ETag header)
+//	       "surgePoolSelectors","surgePoolSelector","floorNodes"},"version":string}
+//	       (+ ETag header)
 //	304 → not modified (keep the cached policy)
 //	401/404/5xx → treated as unconfigured (FAIL OPEN)
 //
@@ -13,6 +14,13 @@
 // response, yields Policy{Configured:false}, which the planner turns into an
 // empty plan — i.e. "monitor everything". The controller is never a single
 // point of failure for the customer's monitoring.
+//
+// Surge pools are a LIST (`surgePoolSelectors`); a cluster routinely has more
+// than one. `surgePoolSelector` is the older single-pool field, still sent by
+// the server and still honoured here as a fallback, so a controller and a server
+// of different vintages always agree on at least one pool rather than silently
+// agreeing on none. Read the list through Spec.SurgeSelectors(), never the raw
+// fields.
 package policy
 
 import (
@@ -26,11 +34,39 @@ import (
 
 // Spec is the policy payload the controller acts on.
 type Spec struct {
-	Mode               string  `json:"mode"`
-	SurgeSamplePct     float64 `json:"surgeSamplePct"`
-	StablePoolSelector string  `json:"stablePoolSelector"`
-	SurgePoolSelector  string  `json:"surgePoolSelector"`
-	FloorNodes         int     `json:"floorNodes"`
+	Mode           string  `json:"mode"`
+	SurgeSamplePct float64 `json:"surgeSamplePct"`
+	// StablePoolSelector is optional and informational: a node matching no
+	// surge selector is left monitored anyway, so the fixed fleet needs no
+	// declaration. Empty means "everything that is not surge".
+	StablePoolSelector string `json:"stablePoolSelector"`
+	// SurgePoolSelectors is the canonical list of surge pools.
+	SurgePoolSelectors []string `json:"surgePoolSelectors"`
+	// SurgePoolSelector is the legacy single surge pool, kept for servers that
+	// predate the list. Prefer SurgeSelectors().
+	//
+	// Deprecated: read SurgeSelectors().
+	SurgePoolSelector string `json:"surgePoolSelector"`
+	FloorNodes        int    `json:"floorNodes"`
+}
+
+// SurgeSelectors resolves the surge pools: the list wins, the legacy single
+// field is the fallback. Blank entries are dropped so a half-populated payload
+// cannot smuggle in a selector that matches every node.
+func (s Spec) SurgeSelectors() []string {
+	out := make([]string, 0, len(s.SurgePoolSelectors)+1)
+	for _, sel := range s.SurgePoolSelectors {
+		if t := strings.TrimSpace(sel); t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	if t := strings.TrimSpace(s.SurgePoolSelector); t != "" {
+		return []string{t}
+	}
+	return nil
 }
 
 // Policy is the resolved policy for the cluster.

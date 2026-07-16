@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-16
+
+### Added
+
+- **Multiple surge nodepools per cluster.** The policy now carries
+  `surgePoolSelectors` (a list); a node matching **any** of them is surge. A
+  Karpenter cluster routinely has several burst pools, and only one could be
+  named before — the rest stayed fully monitored, silently costing the operator
+  savings they thought they had configured.
+
+### Changed
+
+- **The permanent (stable) pool is now derived.** `stablePoolSelector` is
+  optional and reporting-only: a node matching no surge selector is left
+  monitored by construction, so the fixed fleet never needed declaring. When it
+  is empty, the reported stable pool is "everything that is not surge", which is
+  what the fleet actually does. An explicit selector still narrows the report.
+  A policy declaring nothing at all (fail-open) still reports no pools.
+
+### Compatibility
+
+- **Both directions are safe, so controller and server can upgrade in any
+  order.** This controller prefers `surgePoolSelectors` and falls back to the
+  legacy `surgePoolSelector` scalar, so it keeps working against a server that
+  predates the list. A current server keeps sending the scalar (the first pool),
+  so a controller predating this release keeps sampling that pool rather than
+  silently sampling nothing.
+- Operators running several surge pools must upgrade to **1.1.0** for the extra
+  pools to be honoured; on an older controller they are simply left monitored.
+
 ## [1.0.1] - 2026-07-13
 
 ### Security

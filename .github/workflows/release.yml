@@ -59,6 +59,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Stamp the binary with the version it is tagged as. Sourced from the
+          # metadata-action output (`1.2.0` for tag `v1.2.0`) rather than
+          # github.ref_name, so the version the controller reports to Sunshine
+          # cannot drift from the tag on the image it ships in.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           sbom: true # attach an SBOM attestation to the image
           provenance: mode=max # attach SLSA provenance attestation
 

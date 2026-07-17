@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-17
+
+### Added
+
+- **The controller now reports what it understood.** Each reconcile report
+  echoes the surge selectors it actually applied, the version of the policy it
+  acted on, and its own build version (also sent as a `User-Agent`). Sunshine
+  uses this to tell an operator when the controller in their cluster cannot
+  honour the policy they configured — for example, a pre-1.1.0 controller given
+  four surge pools samples only the first, which was previously invisible.
+
+  The echo describes; it never gates. Sunshine accepts and audits every report
+  regardless of version, and a controller that sends none of these fields is
+  treated as **unknown**, never as broken.
+
+- **Build version stamped at link time** (`-ldflags -X …/internal/buildinfo.Version`),
+  wired through the release workflow from the image tag. An unstamped build
+  reports `dev` and works normally.
+
+### Compatibility
+
+- Fully backward compatible in both directions. The new fields are additive and
+  optional; an older Sunshine ignores them, and this controller talks to any
+  Sunshine that predates them. No configuration change, no chart values change.
+
 ## [1.1.0] - 2026-07-16
 
 ### Added

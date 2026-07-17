@@ -102,3 +102,61 @@ func TestFetch_transportErrorFailsOpen(t *testing.T) {
 		t.Fatalf("transport error must fail open, got %+v", p)
 	}
 }
+
+// The list is the canonical surge encoding.
+func TestSurgeSelectors_listWins(t *testing.T) {
+	s := Spec{
+		SurgePoolSelectors: []string{"k=a", "k=b"},
+		SurgePoolSelector:  "k=a",
+	}
+	got := s.SurgeSelectors()
+	if len(got) != 2 || got[0] != "k=a" || got[1] != "k=b" {
+		t.Fatalf("want the full list, got %+v", got)
+	}
+}
+
+// A server predating the list sends only the scalar. Honouring it is what keeps an
+// upgraded controller sampling instead of silently sampling nothing.
+func TestSurgeSelectors_legacyScalarFallback(t *testing.T) {
+	got := Spec{SurgePoolSelector: "capacity-type=spot"}.SurgeSelectors()
+	if len(got) != 1 || got[0] != "capacity-type=spot" {
+		t.Fatalf("want the legacy scalar, got %+v", got)
+	}
+}
+
+func TestSurgeSelectors_blanksDropped(t *testing.T) {
+	if got := (Spec{SurgePoolSelectors: []string{"  ", ""}, SurgePoolSelector: " k=a "}).SurgeSelectors(); len(got) != 1 || got[0] != "k=a" {
+		t.Fatalf("blank list members must not shadow the scalar, got %+v", got)
+	}
+	if got := (Spec{}).SurgeSelectors(); got != nil {
+		t.Fatalf("an empty spec must yield no selectors (fail-open), got %+v", got)
+	}
+}
+
+// End-to-end over the wire: the payload the current server actually sends.
+func TestFetch_parsesSurgeList(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"configured":true,"version":"1:dry_run","policy":{
+			"mode":"dry_run","surgeSamplePct":50,"stablePoolSelector":null,
+			"surgePoolSelectors":["karpenter_nodepool=high-cpu","karpenter_nodepool=default"],
+			"surgePoolSelector":"karpenter_nodepool=high-cpu","floorNodes":1}}`))
+	}))
+	defer srv.Close()
+
+	p, err := NewClient(srv.URL, "TOK", 2*time.Second).Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if !p.Configured {
+		t.Fatal("want configured")
+	}
+	if got := p.Spec.SurgeSelectors(); len(got) != 2 {
+		t.Fatalf("want both surge pools, got %+v", got)
+	}
+	// stablePoolSelector is null on the wire now — it must decode as empty, not
+	// as a selector that matches nothing in particular.
+	if p.Spec.StablePoolSelector != "" {
+		t.Fatalf("want an empty stable selector, got %q", p.Spec.StablePoolSelector)
+	}
+}

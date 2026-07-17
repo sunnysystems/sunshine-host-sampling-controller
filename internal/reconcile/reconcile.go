@@ -75,7 +75,7 @@ func (r *Reconciler) Tick(ctx context.Context) {
 		return
 	}
 
-	pools := node.Classify(nodes, p.Spec.StablePoolSelector, p.Spec.SurgePoolSelector)
+	pools := node.Classify(nodes, p.Spec.StablePoolSelector, p.Spec.SurgeSelectors())
 	r.Metrics.SetPools(len(pools.Stable), len(pools.Surge))
 
 	dec := planner.Plan(pools.Surge, p)

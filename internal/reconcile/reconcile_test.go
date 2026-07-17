@@ -170,3 +170,71 @@ func TestTick_reportsNotActuatedInDryRun(t *testing.T) {
 		t.Fatal("must report actuated=false when execute is disabled locally")
 	}
 }
+
+// ─── Capability echo (#572) ─────────────────────────────────────────────────
+
+// The echo must be what was APPLIED, not what was received: Sunshine warns the
+// operator based on it, so a selector reported but not acted on (or vice versa)
+// would make the warning lie. Asserted against the actuator's own view of the
+// tick rather than re-deriving from the spec.
+func TestTick_echoesTheSelectorsItActuallyApplied(t *testing.T) {
+	p := policy.Policy{Configured: true, Version: "1750000000000:active", Spec: policy.Spec{
+		Mode:               "active",
+		SurgeSamplePct:     50,
+		SurgePoolSelectors: []string{"capacity-type=spot", "karpenter.sh/nodepool=burst"},
+		SurgePoolSelector:  "capacity-type=spot", // legacy mirror, must not win
+	}}
+	rep := &captureReporter{}
+	r := newReconciler(fakePolicy{p: p}, fakeNodes{nodes: []node.Node{surge("s0", 0), surge("s1", 1)}}, &captureActuator{})
+	r.Reporter = rep
+	r.Tick(context.Background())
+
+	want := []string{"capacity-type=spot", "karpenter.sh/nodepool=burst"}
+	if len(rep.last.HonoredSurgeSelectors) != len(want) {
+		t.Fatalf("honored = %v, want %v", rep.last.HonoredSurgeSelectors, want)
+	}
+	for i := range want {
+		if rep.last.HonoredSurgeSelectors[i] != want[i] {
+			t.Fatalf("honored = %v, want %v", rep.last.HonoredSurgeSelectors, want)
+		}
+	}
+	if rep.last.PolicyVersion != "1750000000000:active" {
+		t.Fatalf("policyVersion = %q — Sunshine cannot tell a stale poll from an incapable controller without it", rep.last.PolicyVersion)
+	}
+}
+
+// A pre-list server sends only the legacy scalar. The echo must report the one
+// pool that was really honoured — this is the exact case the operator needs to
+// see, so it must not be dressed up as the full configured list.
+func TestTick_echoesLegacyScalarWhenThatIsAllTheServerSent(t *testing.T) {
+	p := policy.Policy{Configured: true, Version: "42:dry_run", Spec: policy.Spec{
+		Mode:              "dry_run",
+		SurgePoolSelector: "capacity-type=spot",
+	}}
+	rep := &captureReporter{}
+	r := newReconciler(fakePolicy{p: p}, fakeNodes{nodes: []node.Node{surge("s0", 0)}}, &captureActuator{})
+	r.Reporter = rep
+	r.Tick(context.Background())
+
+	if len(rep.last.HonoredSurgeSelectors) != 1 || rep.last.HonoredSurgeSelectors[0] != "capacity-type=spot" {
+		t.Fatalf("honored = %v, want [capacity-type=spot]", rep.last.HonoredSurgeSelectors)
+	}
+}
+
+// Fail-open tick: no policy, so nothing was honoured. The echo must say so
+// (empty) rather than go missing — see report.payload for why the distinction
+// between "nothing" and "cannot tell" is load-bearing.
+func TestTick_echoesEmptyWhenPolicyIsUnconfigured(t *testing.T) {
+	rep := &captureReporter{}
+	r := newReconciler(
+		fakePolicy{p: policy.Policy{Configured: false}, err: errors.New("boom")},
+		fakeNodes{nodes: []node.Node{surge("s0", 0)}},
+		&captureActuator{},
+	)
+	r.Reporter = rep
+	r.Tick(context.Background())
+
+	if len(rep.last.HonoredSurgeSelectors) != 0 {
+		t.Fatalf("honored = %v, want empty on an unconfigured policy", rep.last.HonoredSurgeSelectors)
+	}
+}

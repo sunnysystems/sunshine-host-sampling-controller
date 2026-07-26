@@ -1,0 +1,5 @@
+# Code owners for this repository.
+# Reviews route to the owning team, not to an individual.
+# Managed as part of Sunny Systems governance (audited by scopeward).
+
+* @sunnysystems/sunshine

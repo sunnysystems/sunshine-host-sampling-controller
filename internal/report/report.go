@@ -39,19 +39,33 @@ func NewClient(endpoint, token string, timeout time.Duration, log *slog.Logger) 
 }
 
 type payload struct {
-	Mode            string   `json:"mode"`
-	Actuated        bool     `json:"actuated"`
-	MonitoredCount  int      `json:"monitoredCount"`
-	SampledOutCount int      `json:"sampledOutCount"`
-	LabelsApplied   int      `json:"labelsApplied"`
-	LabelsCleared   int      `json:"labelsCleared"`
-	LabelErrors     int      `json:"labelErrors"`
-	SampledNodes    []string `json:"sampledNodes"`
+	Mode            string `json:"mode"`
+	Actuated        bool   `json:"actuated"`
+	MonitoredCount  int    `json:"monitoredCount"`
+	SampledOutCount int    `json:"sampledOutCount"`
+	LabelsApplied   int    `json:"labelsApplied"`
+	LabelsCleared   int    `json:"labelsCleared"`
+	LabelErrors     int    `json:"labelErrors"`
+	// Always marshalled as an array, never as null — see the normalization in
+	// Report. A nil []string would marshal to `null`, which is what every
+	// reconcile that samples nothing produces, and older Sunshine servers
+	// rejected that with 400 (issue #8).
+	SampledNodes []string `json:"sampledNodes"`
 }
 
 // Report ships one reconcile summary. Errors are logged and swallowed.
 func (c *Client) Report(ctx context.Context, in reconcile.ReportInput) {
+	// Normalize nil to an empty slice BEFORE marshalling. planner.Plan builds
+	// SampledOut with append over a nil slice, so "nothing sampled out" — the
+	// steady state of a healthy dry-run cluster — arrives here as nil, and Go
+	// marshals that as `null` rather than `[]`. Sending `[]` keeps the report an
+	// affirmative "no node was sampled out" instead of a shape the server has to
+	// interpret. Preferred over `omitempty`, which would drop the field entirely
+	// and make the same state look like a controller too old to report it.
 	nodes := in.SampledNodes
+	if nodes == nil {
+		nodes = []string{}
+	}
 	if len(nodes) > maxSampledNodes {
 		nodes = nodes[:maxSampledNodes]
 	}

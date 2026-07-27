@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A nil `SampledNodes` is no longer marshalled as `null`.** `planner.Plan`
+  builds `Decision.SampledOut` with `append` over a nil slice, so every reconcile
+  that samples nothing — the steady state of a healthy dry-run cluster — reached
+  the report client as nil, and Go marshals that as `null` rather than `[]`.
+  Sunshine answered `400`, the report was logged and dropped, and the operator's
+  audit trail and monitored/dark panel stayed empty. Reconciles were never
+  affected (reporting is best-effort and never blocks one, so no node was ever
+  mislabelled), but the cluster became invisible from the console. The report now
+  always sends an array, keeping "no node was sampled out" an affirmative answer
+  rather than a shape the server has to interpret. Present in v1.0.0–v1.1.0
+  (#8). The server side accepts `null` as of
+  sunnysystems/sunnysystems-sunshine#644, so upgrading is not required to restore
+  reporting.
+
 ## [1.1.0] - 2026-07-16
 
 ### Added

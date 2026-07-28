@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/actuator"
+	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/buildinfo"
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/config"
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/kube"
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/metrics"
@@ -117,6 +118,7 @@ func main() {
 	defer stop()
 
 	log.Info("host-sampling-controller started",
+		"version", buildinfo.Version,
 		"dryRun", cfg.DryRun,
 		"endpoint", cfg.Endpoint,
 		"cluster", cfg.ClusterID,

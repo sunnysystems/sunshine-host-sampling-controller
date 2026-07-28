@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/buildinfo"
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/reconcile"
 )
 
@@ -47,6 +48,20 @@ type payload struct {
 	LabelsCleared   int      `json:"labelsCleared"`
 	LabelErrors     int      `json:"labelErrors"`
 	SampledNodes    []string `json:"sampledNodes"`
+
+	// The capability echo (#572). Sunshine reads these to warn when a cluster's
+	// controller cannot honour the configured policy — never to reject a report.
+	//
+	// HonoredSurgeSelectors carries NO omitempty, and Report() replaces a nil
+	// slice with an empty one, ON PURPOSE. Sunshine distinguishes three states
+	// by presence alone: absent = a controller too old to echo (unknown), `[]` =
+	// this controller honoured no surge pool (unconfigured policy), `[...]` =
+	// these pools were applied. A nil slice marshals to `null`, which would
+	// collapse "I honoured nothing" into "I cannot tell you" and make an
+	// unconfigured cluster indistinguishable from a stale binary.
+	PolicyVersion         string   `json:"policyVersion,omitempty"`
+	HonoredSurgeSelectors []string `json:"honoredSurgeSelectors"`
+	ControllerVersion     string   `json:"controllerVersion,omitempty"`
 }
 
 // Report ships one reconcile summary. Errors are logged and swallowed.
@@ -55,15 +70,24 @@ func (c *Client) Report(ctx context.Context, in reconcile.ReportInput) {
 	if len(nodes) > maxSampledNodes {
 		nodes = nodes[:maxSampledNodes]
 	}
+	// Never nil — see the payload doc: `[]` and absent mean different things to
+	// the server, and only a non-nil slice marshals to `[]`.
+	honored := in.HonoredSurgeSelectors
+	if honored == nil {
+		honored = []string{}
+	}
 	body, err := json.Marshal(payload{
-		Mode:            in.Mode,
-		Actuated:        in.Actuated,
-		MonitoredCount:  in.MonitoredCount,
-		SampledOutCount: in.SampledOutCount,
-		LabelsApplied:   in.LabelsApplied,
-		LabelsCleared:   in.LabelsCleared,
-		LabelErrors:     in.LabelErrors,
-		SampledNodes:    nodes,
+		Mode:                  in.Mode,
+		Actuated:              in.Actuated,
+		MonitoredCount:        in.MonitoredCount,
+		SampledOutCount:       in.SampledOutCount,
+		LabelsApplied:         in.LabelsApplied,
+		LabelsCleared:         in.LabelsCleared,
+		LabelErrors:           in.LabelErrors,
+		SampledNodes:          nodes,
+		PolicyVersion:         in.PolicyVersion,
+		HonoredSurgeSelectors: honored,
+		ControllerVersion:     buildinfo.Version,
 	})
 	if err != nil {
 		c.log.Warn("report: marshal failed", "err", err)
@@ -77,6 +101,7 @@ func (c *Client) Report(ctx context.Context, in reconcile.ReportInput) {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", buildinfo.UserAgent())
 
 	resp, err := c.http.Do(req)
 	if err != nil {

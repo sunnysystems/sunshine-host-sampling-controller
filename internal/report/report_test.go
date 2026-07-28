@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/buildinfo"
+	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/node"
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/reconcile"
 )
 
@@ -202,5 +203,49 @@ func TestReport_nilSampledNodesMarshalsAsEmptyArray(t *testing.T) {
 	}
 	if bytes.Contains(raw, []byte(`"sampledNodes":null`)) {
 		t.Fatalf("body must never carry a null sampledNodes, got %s", raw)
+	}
+}
+
+// The observed-label summary must reach the wire in raw Kubernetes form, and
+// must never be null (sunnysystems-sunshine#645, and the #8 null lesson).
+func TestReport_carriesObservedNodeLabels(t *testing.T) {
+	var raw []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	NewClient(srv.URL, "t", 2*time.Second, discardLog()).Report(
+		context.Background(),
+		reconcile.ReportInput{
+			Mode: "dry_run",
+			ObservedLabels: []node.LabelSummary{
+				{Key: "karpenter.sh/nodepool", Values: []string{"default", "high-cpu"}},
+			},
+		},
+	)
+
+	want := `"observedNodeLabels":[{"key":"karpenter.sh/nodepool","values":["default","high-cpu"]}]`
+	if !bytes.Contains(raw, []byte(want)) {
+		t.Fatalf("body missing raw k8s label key.\ngot:  %s\nwant: %s", raw, want)
+	}
+}
+
+func TestReport_nilObservedLabelsMarshalsAsEmptyArray(t *testing.T) {
+	var raw []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	NewClient(srv.URL, "t", 2*time.Second, discardLog()).Report(
+		context.Background(),
+		reconcile.ReportInput{Mode: "dry_run", ObservedLabels: nil},
+	)
+
+	if !bytes.Contains(raw, []byte(`"observedNodeLabels":[]`)) {
+		t.Fatalf(`want "observedNodeLabels":[], got %s`, raw)
 	}
 }

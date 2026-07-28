@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/buildinfo"
+	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/node"
 	"github.com/sunnysystems/sunshine-host-sampling-controller/internal/reconcile"
 )
 
@@ -52,6 +53,10 @@ type payload struct {
 	// reconcile that samples nothing produces, and older Sunshine servers
 	// rejected that with 400 (issue #8).
 	SampledNodes []string `json:"sampledNodes"`
+	// ObservedNodeLabels lets Sunshine's config UI offer the cluster's REAL
+	// label keys. Descriptive only; the server treats it as advisory and never
+	// refuses a report over it. Also never nil, for the reason above.
+	ObservedNodeLabels []node.LabelSummary `json:"observedNodeLabels"`
 
 	// The capability echo (#572). Sunshine reads these to warn when a cluster's
 	// controller cannot honour the configured policy — never to reject a report.
@@ -84,6 +89,11 @@ func (c *Client) Report(ctx context.Context, in reconcile.ReportInput) {
 	if len(nodes) > maxSampledNodes {
 		nodes = nodes[:maxSampledNodes]
 	}
+	labels := in.ObservedLabels
+	if labels == nil {
+		labels = []node.LabelSummary{}
+	}
+
 	// Never nil — see the payload doc: `[]` and absent mean different things to
 	// the server, and only a non-nil slice marshals to `[]`.
 	honored := in.HonoredSurgeSelectors
@@ -102,6 +112,7 @@ func (c *Client) Report(ctx context.Context, in reconcile.ReportInput) {
 		PolicyVersion:         in.PolicyVersion,
 		HonoredSurgeSelectors: honored,
 		ControllerVersion:     buildinfo.Version,
+		ObservedNodeLabels:    labels,
 	})
 	if err != nil {
 		c.log.Warn("report: marshal failed", "err", err)

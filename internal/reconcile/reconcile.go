@@ -34,6 +34,12 @@ type ReportInput struct {
 	LabelsCleared   int
 	LabelErrors     int
 	SampledNodes    []string
+	// ObservedLabels is what node labels this cluster actually carries. Purely
+	// descriptive — the controller acts on the policy it was given, never on
+	// this. It exists so Sunshine can offer real Kubernetes label keys in the
+	// config UI instead of inferring them from Datadog tag names, which produced
+	// selectors that could never match (sunnysystems-sunshine#645).
+	ObservedLabels []node.LabelSummary
 
 	// PolicyVersion and HonoredSurgeSelectors are the controller ECHOING BACK
 	// what it understood, so Sunshine can tell "honouring the whole policy" from
@@ -123,6 +129,10 @@ func (r *Reconciler) Tick(ctx context.Context) {
 			SampledNodes:          dec.SampledOut,
 			PolicyVersion:         p.Version,
 			HonoredSurgeSelectors: surgeSelectors,
+			// Summarized over ALL nodes, not just surge: the operator is picking
+			// which label distinguishes the pools, so they need to see the keys
+			// on the nodes they have NOT selected yet just as much.
+			ObservedLabels: node.SummarizeLabels(nodes),
 		})
 	}
 }

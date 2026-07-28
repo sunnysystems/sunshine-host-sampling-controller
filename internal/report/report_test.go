@@ -1,6 +1,7 @@
 package report
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -172,5 +173,34 @@ func TestReport_unstampedBuildStillReports(t *testing.T) {
 	)
 	if got := string(raw["controllerVersion"]); got != `"`+buildinfo.Version+`"` {
 		t.Fatalf("controllerVersion = %s, want %q", got, buildinfo.Version)
+	}
+}
+
+// A nil SampledNodes must go on the wire as `[]`, never as `null`.
+//
+// planner.Plan builds Decision.SampledOut with append over a nil slice, so every
+// reconcile that samples nothing — the steady state of a healthy dry-run cluster
+// — hands this package a nil slice. Marshalling that as `null` got 400'd by
+// Sunshine, silently costing the customer their entire audit trail (issue #8).
+// Assert on the RAW BODY: decoding into payload would turn both `null` and `[]`
+// back into a nil slice and hide the very difference under test.
+func TestReport_nilSampledNodesMarshalsAsEmptyArray(t *testing.T) {
+	var raw []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	NewClient(srv.URL, "t", 2*time.Second, discardLog()).Report(
+		context.Background(),
+		reconcile.ReportInput{Mode: "dry_run", SampledNodes: nil},
+	)
+
+	if !bytes.Contains(raw, []byte(`"sampledNodes":[]`)) {
+		t.Fatalf(`body must carry "sampledNodes":[], got %s`, raw)
+	}
+	if bytes.Contains(raw, []byte(`"sampledNodes":null`)) {
+		t.Fatalf("body must never carry a null sampledNodes, got %s", raw)
 	}
 }

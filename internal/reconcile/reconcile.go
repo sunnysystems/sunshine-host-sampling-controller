@@ -40,6 +40,22 @@ type ReportInput struct {
 	// config UI instead of inferring them from Datadog tag names, which produced
 	// selectors that could never match (sunnysystems-sunshine#645).
 	ObservedLabels []node.LabelSummary
+
+	// PolicyVersion and HonoredSurgeSelectors are the controller ECHOING BACK
+	// what it understood, so Sunshine can tell "honouring the whole policy" from
+	// "honouring part of it" without keeping a table of blessed versions (#572).
+	//
+	// PolicyVersion is the opaque version of the policy this tick acted on —
+	// empty when unconfigured or when the server sent none. Sunshine compares it
+	// against the config's own version to tell a controller that CANNOT honour
+	// the policy from one that simply has not polled the latest one yet; without
+	// it, every edit would raise a spurious warning until the next tick.
+	//
+	// HonoredSurgeSelectors is exactly the selector list handed to Classify —
+	// the truth about what was applied, not what was received. Empty (never nil,
+	// see report.payload) when the policy is unconfigured.
+	PolicyVersion         string
+	HonoredSurgeSelectors []string
 }
 
 // Reporter ships the reconcile summary to Sunshine (best-effort; never blocks or
@@ -81,7 +97,11 @@ func (r *Reconciler) Tick(ctx context.Context) {
 		return
 	}
 
-	pools := node.Classify(nodes, p.Spec.StablePoolSelector, p.Spec.SurgeSelectors())
+	// Resolved once and reused for both the classification and the echo, so what
+	// is reported to Sunshine is by construction what was applied — not a second
+	// derivation that could drift from it (#572).
+	surgeSelectors := p.Spec.SurgeSelectors()
+	pools := node.Classify(nodes, p.Spec.StablePoolSelector, surgeSelectors)
 	r.Metrics.SetPools(len(pools.Stable), len(pools.Surge))
 
 	dec := planner.Plan(pools.Surge, p)
@@ -99,14 +119,16 @@ func (r *Reconciler) Tick(ctx context.Context) {
 			mode = p.Spec.Mode
 		}
 		r.Reporter.Report(ctx, ReportInput{
-			Mode:            mode,
-			Actuated:        r.ExecuteEnabled && p.Configured && p.Spec.Mode == "active",
-			MonitoredCount:  len(dec.Monitored),
-			SampledOutCount: len(dec.SampledOut),
-			LabelsApplied:   res.Applied,
-			LabelsCleared:   res.Cleared,
-			LabelErrors:     res.Errors,
-			SampledNodes:    dec.SampledOut,
+			Mode:                  mode,
+			Actuated:              r.ExecuteEnabled && p.Configured && p.Spec.Mode == "active",
+			MonitoredCount:        len(dec.Monitored),
+			SampledOutCount:       len(dec.SampledOut),
+			LabelsApplied:         res.Applied,
+			LabelsCleared:         res.Cleared,
+			LabelErrors:           res.Errors,
+			SampledNodes:          dec.SampledOut,
+			PolicyVersion:         p.Version,
+			HonoredSurgeSelectors: surgeSelectors,
 			// Summarized over ALL nodes, not just surge: the operator is picking
 			// which label distinguishes the pools, so they need to see the keys
 			// on the nodes they have NOT selected yet just as much.

@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-29
+
+Documentation only — no controller or chart behaviour changes from 1.2.0.
+
 ### Documentation
 
 - **Every install command pinned `1.0.1`**, two releases behind. Following the
   runbook literally installed a controller that honours only the first surge
   pool and reports neither what it applied nor the labels it observes — which is
   to say, the docs reproduced the exact failure 1.2.0 exists to prevent.
-  Repinned to `1.2.0` across the README, the chart README and both deployment
+  Repinned to `1.2.1` across the README, the chart README and both deployment
   guides, with a table of what each version lets Sunshine see, so "should we
   upgrade?" has an answer that is about consequences rather than version numbers.
 - **Install the controller BEFORE configuring the policy**, now stated where the
@@ -189,6 +193,9 @@ the Datadog host-count bill.
 - **Helm chart** — `chart/` with RBAC that is read-only in dry-run and widens to
   node `patch/update` only when `dryRun=false`.
 
-[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/releases/tag/v1.0.0

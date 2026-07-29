@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **Every install command pinned `1.0.1`**, two releases behind. Following the
+  runbook literally installed a controller that honours only the first surge
+  pool and reports neither what it applied nor the labels it observes — which is
+  to say, the docs reproduced the exact failure 1.2.0 exists to prevent.
+  Repinned to `1.2.0` across the README, the chart README and both deployment
+  guides, with a table of what each version lets Sunshine see, so "should we
+  upgrade?" has an answer that is about consequences rather than version numbers.
+- **Install the controller BEFORE configuring the policy**, now stated where the
+  policy is configured. From 1.2.0 the label dropdown in Sunshine is built from
+  what the controller observed (raw Kubernetes keys, badged "from the cluster");
+  configure first and it falls back to inferring names from Datadog host tags,
+  which rewrite punctuation and yield a selector that matches no node.
+- **Two symptoms added to troubleshooting**, both of which cost a design partner
+  weeks: `configured: true` with `budget: 0, monitored: 0` tick after tick (a
+  selector matching nothing — indistinguishable from a healthy idle fleet), and
+  an empty monitored panel while the controller logs reconciles normally
+  (reports rejected, or no token issued).
+
 ## [1.2.0] - 2026-07-28
 
 ### Added

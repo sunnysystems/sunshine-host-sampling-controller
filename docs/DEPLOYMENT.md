@@ -225,7 +225,7 @@ The chart is published as a signed OCI artifact on GHCR; from a source checkout,
 ```sh
 helm install host-sampling \
   oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
-  --version 1.0.1 \
+  --version 1.2.0 \
   --set sunshine.endpoint=https://app.sunshine.example.com \
   --set sunshine.clusterId=prod-us-east-1 \
   --set sunshine.tokenSecretName=host-sampling-token \
@@ -237,6 +237,15 @@ helm install host-sampling \
   `get/list` on `daemonsets`).
 - Setting `agent.daemonsetNamespace/Name` here already enables the **affinity
   preflight**, so you find out early whether enforcement is ready.
+
+**Install 1.2.0 or newer.** Earlier versions work, but each one leaves Sunshine
+blinder — and the cost of that is not theoretical:
+
+| Version | What Sunshine can see |
+|---------|----------------------|
+| `1.0.x` | Reconcile counts only. Honours **just the first** surge pool; the rest stay 100% monitored with no warning. |
+| `1.1.0` | Honours every pool, but does not say which it applied — Sunshine cannot confirm it. |
+| `1.2.0` | Reports the policy it acted on, the pools it honoured, and **the labels it sees on the nodes**. This is what lets Sunshine flag a selector that matches nothing instead of showing a serene `monitored: 0`. |
 
 ### 6.3 Confirm it came up
 
@@ -258,6 +267,17 @@ On the Sunshine side, configure the cluster's host-sampling policy (leave it in
 - `surgePoolSelector` — e.g. `sunshine.io/pool=surge`
 - `surgeSamplePct` — % of the surge to keep monitored (e.g. `20`)
 - `floorNodes` — minimum floor of monitored surge nodes (e.g. `2`)
+
+> **Order matters: install the controller BEFORE configuring.** From 1.2.0 the
+> controller reports to Sunshine the labels it actually sees on the nodes, and
+> the "how do you tell the nodes apart?" list is built from those — raw
+> Kubernetes keys, badged on screen as **"from the cluster"**.
+>
+> Configure before any controller has reported and Sunshine falls back to
+> inferring the names from **Datadog host tags**, which rewrite punctuation
+> (`karpenter.sh/nodepool` arrives as `karpenter_nodepool`). The screen says so
+> ("inferred from Datadog"), but a selector built from that **matches no node** —
+> and fails silently, with no error on either side.
 
 ### 6.5 Read the metrics and validate the plan
 
@@ -316,7 +336,7 @@ stays safe:
    ```sh
    helm upgrade host-sampling \
      oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
-     --version 1.0.1 --reuse-values --set dryRun=false
+     --version 1.2.0 --reuse-values --set dryRun=false
    ```
 
 ### What to watch after go-live
@@ -414,12 +434,12 @@ by the release workflow; the signing identity is the repo's `release.yml` on the
 version tag:
 
 ```sh
-cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.0.1 \
+cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.2.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
   '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
 
-cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.0.1 \
+cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.2.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
   '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
@@ -435,6 +455,8 @@ The image also carries SBOM and SLSA provenance attestations, inspectable with
 | Symptom | Likely cause | Action |
 |---------|--------------|--------|
 | `policy_configured = 0` | Policy not configured in Sunshine, or `401/404/5xx`, or wrong token | Check the token/endpoint/cluster id and the policy in Sunshine. Fail-open meanwhile: everything monitored. |
+| **`configured: true` but `budget: 0, monitored: 0`, tick after tick** | The surge selector matches **no** node: a key that does not exist, or the right key with a value no node carries (pool renamed, or scaled to zero) | The most treacherous symptom — identical to a healthy fleet with nothing to sample, which is why it goes unnoticed for weeks. Since 1.2.0 **Sunshine names it on screen**, listing the values the cluster actually has. Confirm with `kubectl get nodes --show-labels` and `kubectl get nodepools`. |
+| Monitored panel and audit trail **empty** in Sunshine, while the controller logs reconciles normally | Reports being rejected, or no token issued for this cluster | Look for `report: server rejected` in the logs. With no token, Sunshine also names it on screen since 1.2.0. A reconcile is **never** blocked by this: the effect is blindness on the console side, not risk in the cluster. |
 | `policy_fetch_errors_total` rising | Egress/DNS/network or invalid token | Test HTTPS connectivity from the pod to the endpoint; revalidate the token. |
 | `enforcement_affinity_present = 0` | Agent DaemonSet **without** the `nodeAffinity` | Add the affinity from section 4 to the agent DaemonSet. |
 | Preflight doesn't emit the metric | `agent.daemonsetNamespace/Name` not set | Set both in Helm. |

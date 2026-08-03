@@ -56,7 +56,35 @@ type ReportInput struct {
 	// see report.payload) when the policy is unconfigured.
 	PolicyVersion         string
 	HonoredSurgeSelectors []string
+
+	// EnforcementAffinity is the startup preflight's verdict on whether the
+	// agent DaemonSet carries the sampled-out anti-affinity
+	// (sunnysystems-sunshine#657). Until now it lived only in this cluster, as a
+	// log line and a gauge — so an operator driving from the Sunshine console
+	// had no way to learn that labelling a node would not remove its agent.
+	//
+	// A STRING, not a bool, on the lesson of #8: a zero-value bool is `false`,
+	// which here would read as "confirmed absent" when the truth is "nobody
+	// looked". Empty means unknown and is dropped from the payload entirely, so
+	// absence on the wire and absence of knowledge are the same thing.
+	EnforcementAffinity EnforcementAffinity
 }
+
+// EnforcementAffinity is the preflight tri-state. Unknown is the zero value on
+// purpose: every path that fails to establish an answer lands there.
+type EnforcementAffinity string
+
+const (
+	// EnforcementUnknown — the preflight was skipped (no DaemonSet configured)
+	// or could not read it. Never an accusation.
+	EnforcementUnknown EnforcementAffinity = ""
+	// EnforcementPresent — the DaemonSet carries the anti-affinity; sampling a
+	// node will pull its agent.
+	EnforcementPresent EnforcementAffinity = "present"
+	// EnforcementAbsent — read the DaemonSet, and the anti-affinity is not
+	// there. Sampling would write the label and change nothing that is billed.
+	EnforcementAbsent EnforcementAffinity = "absent"
+)
 
 // Reporter ships the reconcile summary to Sunshine (best-effort; never blocks or
 // fails the tick). Optional — nil disables reporting.
@@ -76,6 +104,12 @@ type Reconciler struct {
 	// ExecuteEnabled mirrors the local DRY_RUN=false switch — used only to label
 	// a report as actuated (labels are still gated by the actuator + served mode).
 	ExecuteEnabled bool
+	// EnforcementAffinity is the startup preflight verdict, carried on every
+	// report (#657). Set once at construction: the DaemonSet's affinity is not
+	// re-read per tick, so this reports what was true at startup — a change to
+	// the DaemonSet after that is picked up on the next controller restart, the
+	// same lifetime the metric already had.
+	EnforcementAffinity EnforcementAffinity
 }
 
 // Tick performs a single reconcile. It never panics or exits the process — a
@@ -129,6 +163,7 @@ func (r *Reconciler) Tick(ctx context.Context) {
 			SampledNodes:          dec.SampledOut,
 			PolicyVersion:         p.Version,
 			HonoredSurgeSelectors: surgeSelectors,
+			EnforcementAffinity:   r.EnforcementAffinity,
 			// Summarized over ALL nodes, not just surge: the operator is picking
 			// which label distinguishes the pools, so they need to see the keys
 			// on the nodes they have NOT selected yet just as much.

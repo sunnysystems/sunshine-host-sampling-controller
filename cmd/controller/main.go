@@ -71,6 +71,11 @@ func main() {
 	// agent DaemonSet has the inverted nodeAffinity on the sampled-out label.
 	// Verify it (read-only) so a misconfigured install surfaces before it
 	// produces phantom savings. Optional — skipped when the DaemonSet is unset.
+	// Unknown until the preflight says otherwise, and unknown is what every
+	// failure path leaves behind — including the whole block being skipped. The
+	// verdict now rides on every report (#657), so the console can stop being the
+	// only place that cannot see it.
+	enforcement := reconcile.EnforcementUnknown
 	if cfg.AgentDaemonSetNamespace != "" && cfg.AgentDaemonSetName != "" {
 		pfCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		present, err := kube.NewAffinityChecker(clientset).HasSampledOutAntiAffinity(
@@ -78,13 +83,17 @@ func main() {
 		cancel()
 		switch {
 		case err != nil:
+			// Deliberately NOT "absent": we failed to read, which is not the same
+			// as having read and found nothing.
 			log.Warn("enforcement preflight: could not read the agent DaemonSet — cannot confirm labels will take effect",
 				"namespace", cfg.AgentDaemonSetNamespace, "name", cfg.AgentDaemonSetName, "err", err)
 		case present:
+			enforcement = reconcile.EnforcementPresent
 			reg.SetEnforcementAffinity(true)
 			log.Info("enforcement preflight: agent DaemonSet carries the sampled-out anti-affinity — labels will take effect",
 				"namespace", cfg.AgentDaemonSetNamespace, "name", cfg.AgentDaemonSetName)
 		default:
+			enforcement = reconcile.EnforcementAbsent
 			reg.SetEnforcementAffinity(false)
 			log.Warn("enforcement preflight: agent DaemonSet is MISSING the sampled-out anti-affinity — sampling a node will NOT remove its agent (no savings); add the nodeAffinity (see chart README) before enabling execute",
 				"namespace", cfg.AgentDaemonSetNamespace, "name", cfg.AgentDaemonSetName)
@@ -92,13 +101,14 @@ func main() {
 	}
 
 	reconciler := &reconcile.Reconciler{
-		Policy:         policy.NewClient(cfg.Endpoint, cfg.Token, 10*time.Second),
-		Nodes:          kube.NewLister(clientset),
-		Actuator:       act,
-		Metrics:        reg,
-		Log:            log,
-		Reporter:       report.NewClient(cfg.Endpoint, cfg.Token, 10*time.Second, log),
-		ExecuteEnabled: !cfg.DryRun,
+		Policy:              policy.NewClient(cfg.Endpoint, cfg.Token, 10*time.Second),
+		Nodes:               kube.NewLister(clientset),
+		Actuator:            act,
+		Metrics:             reg,
+		Log:                 log,
+		Reporter:            report.NewClient(cfg.Endpoint, cfg.Token, 10*time.Second, log),
+		ExecuteEnabled:      !cfg.DryRun,
+		EnforcementAffinity: enforcement,
 	}
 
 	mux := http.NewServeMux()

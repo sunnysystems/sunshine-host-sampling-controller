@@ -71,6 +71,18 @@ type payload struct {
 	PolicyVersion         string   `json:"policyVersion,omitempty"`
 	HonoredSurgeSelectors []string `json:"honoredSurgeSelectors"`
 	ControllerVersion     string   `json:"controllerVersion,omitempty"`
+
+	// EnforcementAffinity carries the startup preflight verdict so the Sunshine
+	// console can say what today only this cluster's logs know: whether writing
+	// the sampled-out label will actually pull the agent (#657).
+	//
+	// `omitempty` is CORRECT here and would be wrong on a bool. The values are
+	// "present" and "absent"; unknown is the empty string and vanishes from the
+	// payload, so a controller that skipped the preflight looks exactly like one
+	// too old to have it — both are "we do not know", the honest answer and the
+	// one Sunshine must not turn into an accusation. A bool would make the
+	// unknown case indistinguishable from a confirmed "absent" (#8).
+	EnforcementAffinity string `json:"enforcementAffinity,omitempty"`
 }
 
 // Report ships one reconcile summary. Errors are logged and swallowed.
@@ -113,6 +125,7 @@ func (c *Client) Report(ctx context.Context, in reconcile.ReportInput) {
 		HonoredSurgeSelectors: honored,
 		ControllerVersion:     buildinfo.Version,
 		ObservedNodeLabels:    labels,
+		EnforcementAffinity:   string(in.EnforcementAffinity),
 	})
 	if err != nil {
 		c.log.Warn("report: marshal failed", "err", err)

@@ -249,3 +249,56 @@ func TestReport_nilObservedLabelsMarshalsAsEmptyArray(t *testing.T) {
 		t.Fatalf(`want "observedNodeLabels":[], got %s`, raw)
 	}
 }
+
+// The enforcement preflight verdict must reach Sunshine (#657) — until now it
+// lived only in this cluster's logs and gauge, which is why the console could
+// not tell an operator that labelling a node would change nothing billed.
+func TestReport_carriesEnforcementAffinity(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   reconcile.EnforcementAffinity
+		want string
+	}{
+		{"present", reconcile.EnforcementPresent, "present"},
+		{"absent", reconcile.EnforcementAbsent, "absent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body payload
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				w.WriteHeader(http.StatusAccepted)
+			}))
+			defer srv.Close()
+
+			NewClient(srv.URL, "tok", 2*time.Second, discardLog()).Report(
+				context.Background(),
+				reconcile.ReportInput{Mode: "dry_run", EnforcementAffinity: tc.in},
+			)
+			if body.EnforcementAffinity != tc.want {
+				t.Fatalf("enforcementAffinity = %q, want %q", body.EnforcementAffinity, tc.want)
+			}
+		})
+	}
+}
+
+// Unknown must leave the wire entirely rather than travel as a value. A bool
+// here would have made "nobody looked" indistinguishable from "looked, and it
+// is missing" — the #8 mistake, which accuses a correctly-configured cluster.
+func TestReport_unknownEnforcementIsAbsentFromPayload(t *testing.T) {
+	var raw map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &raw)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	NewClient(srv.URL, "tok", 2*time.Second, discardLog()).Report(
+		context.Background(),
+		// Zero value: the preflight was skipped or could not read the DaemonSet.
+		reconcile.ReportInput{Mode: "dry_run"},
+	)
+	if _, present := raw["enforcementAffinity"]; present {
+		t.Fatalf("unknown must be omitted, got %v", raw["enforcementAffinity"])
+	}
+}

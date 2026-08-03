@@ -238,3 +238,50 @@ func TestTick_echoesEmptyWhenPolicyIsUnconfigured(t *testing.T) {
 		t.Fatalf("honored = %v, want empty on an unconfigured policy", rep.last.HonoredSurgeSelectors)
 	}
 }
+
+// The startup preflight verdict rides on every report, not just the first
+// (#657). Sunshine reads the latest reconcile, so a verdict sent once would be
+// invisible on every screen loaded afterwards.
+func TestTick_reportsEnforcementAffinityOnEveryTick(t *testing.T) {
+	nodes := []node.Node{surge("s0", 0), surge("s1", 1), surge("s2", 2)}
+	p := policy.Policy{Configured: true, Version: "v1", Spec: policy.Spec{
+		Mode:              "dry_run",
+		SurgeSamplePct:    40,
+		FloorNodes:        1,
+		SurgePoolSelector: "capacity-type=spot",
+	}}
+	rep := &captureReporter{}
+	r := newReconciler(fakePolicy{p: p}, fakeNodes{nodes: nodes}, &captureActuator{})
+	r.Reporter = rep
+	r.EnforcementAffinity = EnforcementAbsent
+
+	r.Tick(context.Background())
+	r.Tick(context.Background())
+
+	if rep.calls != 2 {
+		t.Fatalf("reporter called %d times, want 2", rep.calls)
+	}
+	if rep.last.EnforcementAffinity != EnforcementAbsent {
+		t.Fatalf("enforcement = %q, want %q", rep.last.EnforcementAffinity, EnforcementAbsent)
+	}
+}
+
+// A controller with no preflight configured reports unknown, never "absent".
+func TestTick_unsetEnforcementStaysUnknown(t *testing.T) {
+	nodes := []node.Node{surge("s0", 0), surge("s1", 1), surge("s2", 2)}
+	p := policy.Policy{Configured: true, Version: "v1", Spec: policy.Spec{
+		Mode:              "dry_run",
+		SurgeSamplePct:    40,
+		FloorNodes:        1,
+		SurgePoolSelector: "capacity-type=spot",
+	}}
+	rep := &captureReporter{}
+	r := newReconciler(fakePolicy{p: p}, fakeNodes{nodes: nodes}, &captureActuator{})
+	r.Reporter = rep
+
+	r.Tick(context.Background())
+
+	if rep.last.EnforcementAffinity != EnforcementUnknown {
+		t.Fatalf("enforcement = %q, want unknown (empty)", rep.last.EnforcementAffinity)
+	}
+}

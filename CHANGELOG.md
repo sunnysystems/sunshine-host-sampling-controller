@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-03
+
 ### Added
 
 - **The enforcement preflight verdict now reaches Sunshine
@@ -223,7 +225,8 @@ the Datadog host-count bill.
 - **Helm chart** — `chart/` with RBAC that is read-only in dry-run and widens to
   node `patch/update` only when `dryRun=false`.
 
-[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.0.1...v1.1.0

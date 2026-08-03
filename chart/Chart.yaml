@@ -2,8 +2,8 @@ apiVersion: v2
 name: sunshine-host-sampling-controller
 description: Sunshine host-sampling controller — peak host sampling for Kubernetes (dry-run by default).
 type: application
-version: 1.2.1
-appVersion: "1.2.1"
+version: 1.3.0
+appVersion: "1.3.0"
 keywords:
   - datadog
   - cost

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The enforcement preflight verdict now reaches Sunshine
+  ([sunnysystems-sunshine#657]).** The controller has always checked, at startup,
+  whether the agent DaemonSet carries the `sampled-out` anti-affinity — and then
+  kept the answer to itself, as a log line and a gauge. Both live inside the
+  customer's cluster, so an operator driving from the Sunshine console had no way
+  to learn that labelling a node would write the label, leave the agent
+  scheduled, and change nothing that is billed: actuation with zero savings,
+  shaped exactly like actuation that worked. It is the third of the three locks
+  in the chart README and the only one invisible from the console. The verdict
+  now rides on every reconcile report as `enforcementAffinity`.
+
+  Carried as a **string, not a bool**. A zero-value bool is `false`, which here
+  would mean "confirmed absent" when the truth is "nobody looked" — the mistake
+  of #8, and one that would accuse a correctly-configured cluster. Unknown is the
+  empty string, `omitempty` drops it, and a controller that skipped the preflight
+  becomes indistinguishable from one too old to have it. Both are "we do not
+  know", which is the honest answer. The failed-read path deliberately stays
+  unknown rather than absent: failing to read is not the same as having read and
+  found nothing.
+
+  Sent on **every** tick, not just the first — Sunshine reads the latest row, so
+  a verdict reported once would be invisible on every screen loaded afterwards.
+
+  Additive and optional: a Sunshine that does not know the field ignores it, and
+  the server half ships independently.
+
+[sunnysystems-sunshine#657]: https://github.com/sunnysystems/sunnysystems-sunshine/issues/657
+
 ## [1.2.1] - 2026-07-29
 
 Documentation only — no controller or chart behaviour changes from 1.2.0.

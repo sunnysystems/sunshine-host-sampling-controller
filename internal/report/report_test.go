@@ -302,3 +302,58 @@ func TestReport_unknownEnforcementIsAbsentFromPayload(t *testing.T) {
 		t.Fatalf("unknown must be omitted, got %v", raw["enforcementAffinity"])
 	}
 }
+
+func TestReport_carriesNodeAges(t *testing.T) {
+	var raw map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	NewClient(srv.URL, "tok", 2*time.Second, discardLog()).Report(
+		context.Background(),
+		reconcile.ReportInput{
+			Mode: "dry_run",
+			NodeAges: []node.NodeAge{
+				{Name: "ip-10-0-0-1.ec2.internal", CreatedAt: "2026-05-01T10:00:00Z"},
+			},
+		},
+	)
+
+	ages, ok := raw["nodeAges"].([]any)
+	if !ok || len(ages) != 1 {
+		t.Fatalf("nodeAges missing from payload: %#v", raw["nodeAges"])
+	}
+	first, _ := ages[0].(map[string]any)
+	// The plain Kubernetes name: Sunshine owns the translation to its own
+	// inventory's naming, and sending anything else moves that knowledge here.
+	if first["name"] != "ip-10-0-0-1.ec2.internal" {
+		t.Fatalf("wrong node name: %#v", first)
+	}
+	if first["createdAt"] != "2026-05-01T10:00:00Z" {
+		t.Fatalf("wrong timestamp: %#v", first)
+	}
+}
+
+func TestReport_omitsNodeAgesWhenThereIsNoRanking(t *testing.T) {
+	// Absent means "no ranking from here" and sends Sunshine to its own census.
+	// An empty array would instead read as "I rank, and the fleet is empty" —
+	// a claim this controller has no way to make truthfully when it is over the
+	// cap or saw no timestamps.
+	var raw map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&raw)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	NewClient(srv.URL, "tok", 2*time.Second, discardLog()).Report(
+		context.Background(),
+		reconcile.ReportInput{Mode: "dry_run", NodeAges: nil},
+	)
+
+	if _, present := raw["nodeAges"]; present {
+		t.Fatalf("nodeAges should be absent, got %#v", raw["nodeAges"])
+	}
+}

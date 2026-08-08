@@ -83,6 +83,19 @@ type payload struct {
 	// one Sunshine must not turn into an accusation. A bool would make the
 	// unknown case indistinguishable from a confirmed "absent" (#8).
 	EnforcementAffinity string `json:"enforcementAffinity,omitempty"`
+
+	// NodeAges carries each node's real creation time so Sunshine can rank by
+	// the cluster's own clock instead of by when its hourly census first saw a
+	// host (sunnysystems-sunshine#752).
+	//
+	// `omitempty` is right here and would be wrong on HonoredSurgeSelectors,
+	// for a reason worth keeping straight: there, `[]` is a real third answer
+	// ("I honoured no pool") that must not collapse into "I cannot tell you".
+	// Here there is no third answer — a fleet with no nodes and a controller
+	// that cannot rank both leave Sunshine on the same fallback — so absent is
+	// the honest encoding for every case where we have no ranking to offer,
+	// including a fleet too large to send whole.
+	NodeAges []node.NodeAge `json:"nodeAges,omitempty"`
 }
 
 // Report ships one reconcile summary. Errors are logged and swallowed.
@@ -126,6 +139,9 @@ func (c *Client) Report(ctx context.Context, in reconcile.ReportInput) {
 		ControllerVersion:     buildinfo.Version,
 		ObservedNodeLabels:    labels,
 		EnforcementAffinity:   string(in.EnforcementAffinity),
+		// Deliberately NOT normalized to an empty slice: nil must stay nil so
+		// `omitempty` drops the field. See the payload doc.
+		NodeAges: in.NodeAges,
 	})
 	if err != nil {
 		c.log.Warn("report: marshal failed", "err", err)

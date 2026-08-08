@@ -41,6 +41,14 @@ type ReportInput struct {
 	// selectors that could never match (sunnysystems-sunshine#645).
 	ObservedLabels []node.LabelSummary
 
+	// NodeAges is when each node was actually created, straight from the
+	// Kubernetes API (sunnysystems-sunshine#752). Sunshine ranks nodes by age to
+	// tell surge from permanent, and without this it can only use "when our
+	// hourly census first saw the host" — an estimate that cannot see backwards
+	// and gives every pre-existing node the same timestamp. Descriptive, like
+	// the label summary: the controller acts on the policy it was given.
+	NodeAges []node.NodeAge
+
 	// PolicyVersion and HonoredSurgeSelectors are the controller ECHOING BACK
 	// what it understood, so Sunshine can tell "honouring the whole policy" from
 	// "honouring part of it" without keeping a table of blessed versions (#572).
@@ -168,6 +176,12 @@ func (r *Reconciler) Tick(ctx context.Context) {
 			// which label distinguishes the pools, so they need to see the keys
 			// on the nodes they have NOT selected yet just as much.
 			ObservedLabels: node.SummarizeLabels(nodes),
+			// All nodes, not just the surge pool, for the same reason the label
+			// summary is: Sunshine ranks the WHOLE fleet to work out where the
+			// permanent/surge line falls, so withholding the nodes it has not
+			// selected yet would leave it ranking the very half in question by
+			// the estimate this replaces.
+			NodeAges: node.NodeAges(nodes),
 		})
 	}
 }

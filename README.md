@@ -7,7 +7,7 @@ the Datadog host-count bill. It **defaults to dry-run** (reports only, never
 mutates) and writes labels only when all three locks below are satisfied.
 
 > ⚠️ This is the first Sunshine artifact that runs in a customer's environment.
-> Versioning, license, and support policy are in place (v1.3.0, Apache-2.0 —
+> Versioning, license, and support policy are in place (v1.4.0, Apache-2.0 —
 > see [`LICENSE`](LICENSE), [`CONTRIBUTING.md`](CONTRIBUTING.md),
 > [`SECURITY.md`](SECURITY.md)). Each release publishes a cosign-signed
 > multi-arch image and a signed OCI Helm chart to GHCR — see
@@ -126,11 +126,11 @@ To deploy a build of your own (e.g. after an audit, or to serve it from an
 internal registry), build and push the image, then point the chart at it:
 
 ```sh
-make docker IMAGE=registry.example.com/host-sampling-controller:1.3.0-audit
-docker push registry.example.com/host-sampling-controller:1.3.0-audit
+make docker IMAGE=registry.example.com/host-sampling-controller:1.4.0-audit
+docker push registry.example.com/host-sampling-controller:1.4.0-audit
 helm install host-sampling ... \
   --set image.repository=registry.example.com/host-sampling-controller \
-  --set image.tag=1.3.0-audit
+  --set image.tag=1.4.0-audit
 ```
 
 ## Deploy
@@ -143,7 +143,7 @@ See [`chart/README.md`](chart/README.md) for the Helm chart reference. In short:
 kubectl create secret generic host-sampling-token --from-literal=token=<token>
 helm install host-sampling \
   oci://ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller \
-  --version 1.3.0 \
+  --version 1.4.0 \
   --set sunshine.endpoint=https://app.sunshine.example.com \
   --set sunshine.clusterId=prod-us-east-1 \
   --set sunshine.tokenSecretName=host-sampling-token
@@ -181,19 +181,19 @@ Both the image and the chart are signed keylessly with
 identity is this repo's `release.yml` on the version tag:
 
 ```sh
-cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.3.0 \
+cosign verify ghcr.io/sunnysystems/host-sampling-controller:1.4.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
   '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
 
-cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.3.0 \
+cosign verify ghcr.io/sunnysystems/charts/sunshine-host-sampling-controller:1.4.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
   '^https://github\.com/sunnysystems/sunshine-host-sampling-controller/\.github/workflows/release\.yml@refs/tags/v'
 ```
 
 The image also carries SBOM and SLSA provenance attestations, inspectable with
-`docker buildx imagetools inspect ghcr.io/sunnysystems/host-sampling-controller:1.3.0`.
+`docker buildx imagetools inspect ghcr.io/sunnysystems/host-sampling-controller:1.4.0`.
 
 ## Contributing & support
 

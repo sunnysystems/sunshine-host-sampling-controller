@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-08
+
+### Added
+
+- **Each node's real creation time now reaches Sunshine
+  ([sunnysystems-sunshine#752]).** Sunshine ranks nodes by age to tell surge from
+  permanent, and until now it could only use *the first time its hourly census
+  saw a host* — an estimate that cannot see backwards. Every node that already
+  existed when that census started carries one identical timestamp, so among
+  those the ordering was arbitrary; on the cluster driving this, seven nodes
+  share a single stamp. This controller has the exact answer for free, in every
+  node it already lists: `metadata.creationTimestamp`, correct immediately and
+  still correct after a restart, because it lives in the Kubernetes API and not
+  in our memory. Without it, Sunshine's screen could name one node while this
+  controller darkened another — never unsafe, since the floor and the percentage
+  apply either way, but the console asserting something it had not earned.
+  Reported over **all** nodes rather than just the surge pool, for the same
+  reason the label summary is: Sunshine ranks the whole fleet to find where the
+  permanent/surge line falls, and withholding the unselected half would leave it
+  ranking exactly the nodes in question by the estimate this replaces. Over 400
+  nodes the list is dropped **whole** instead of truncated — a prefix silently
+  re-ranks the fleet, and a partial ranking is worse than none because it looks
+  complete — and the field is omitted entirely rather than sent empty, so
+  "nothing to rank from here" and "I cannot rank" both leave Sunshine on its own
+  census. Descriptive only: the controller still acts solely on the policy it
+  was served.
+
+[sunnysystems-sunshine#752]: https://github.com/sunnysystems/sunnysystems-sunshine/issues/752
+
 ## [1.3.0] - 2026-08-03
 
 ### Added
@@ -225,7 +254,8 @@ the Datadog host-count bill.
 - **Helm chart** — `chart/` with RBAC that is read-only in dry-run and widens to
   node `patch/update` only when `dryRun=false`.
 
-[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/sunnysystems/sunshine-host-sampling-controller/compare/v1.1.0...v1.2.0
